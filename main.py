@@ -1,22 +1,22 @@
 import discord
 from discord.ext import commands
+import asyncio
 
 with open('token.txt') as inpf:
     token = inpf.readline()
 
 # client = discord.Client()
-client = commands.Bot(command_prefix='!')
+bot = commands.Bot(command_prefix='!')
 
-@client.event
+@bot.event
 async def on_ready():
-    print('Logged in as {0.user}'.format(client))
+    print('Logged in as {0.user}'.format(bot))
 
-@client.command()
+@bot.command()
 async def q(ctx, arg):
-    print(ctx.author.voice)
     await ctx.send(arg)
 
-@client.command()
+@bot.command()
 async def joinVoice(ctx):
     if (ctx.author.voice): # Check if author of the command is in voice channel
         if not (ctx.voice_client): # Check if Friday is not already in voice channel
@@ -28,7 +28,7 @@ async def joinVoice(ctx):
     else:
         await ctx.send("Join voice channel to invite Friday")
 
-@client.command(aliases = ["~"])
+@bot.command()
 async def leaveVoice(ctx): # Note: ?leave won't work, only ?~ will work unless you change  `name = ["~"]` to `aliases = ["~"]` so both can work.
     if (ctx.voice_client): # If the bot is in a voice channel 
         await ctx.guild.voice_client.disconnect() # Leave the channel
@@ -36,25 +36,29 @@ async def leaveVoice(ctx): # Note: ?leave won't work, only ?~ will work unless y
     else: # But if it isn't
         await ctx.send("I'm not in voice channel")
 
-@client.command()
+@bot.command()# TODO
+async def playSmth(ctx):
+    await ctx.send('Attempting to play')
+    audio_source = discord.FFmpegPCMAudio('content/audio/Ohayo.mp3')
+    if (ctx.voice_client):
+        ctx.voice_client.play(audio_source)
+
+@bot.event
+async def on_voice_state_update(member, before, after):
+    voiceClient = discord.utils.get(bot.voice_clients, guild=member.guild)
+    if ((before.channel is None) and (voiceClient is not None) and (after.channel == voiceClient.channel)):
+        audio_source = discord.FFmpegPCMAudio('content/audio/Ohayo.mp3')
+        await asyncio.sleep(1)
+        voiceClient.play(audio_source)
+                 
+
+@bot.command()
 async def shutdown(ctx):
     if str(ctx.author.top_role) == "Кирилл":
         await ctx.send('Shutting down...Done.')
-        await client.close()
+        await bot.close()
     else:
         await ctx.send('Только Кирилл может меня выключить, позови его.')
 
-'''
-@client.event
-async def on_message(message):
-    if message.author == client.user:
-        return
-
-    # if message.content.startswith('!q'):
-        # await message.channel.send('Hi')
-
-    if message.content.startswith('!shutdown'):
-        await message.channel.send('Shutting down...Bye.')
-        await client.close()'''
     
-client.run(token)
+bot.run(token)
