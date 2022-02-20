@@ -1,6 +1,8 @@
 import discord
 from discord.ext import commands
 import asyncio
+from gtts import gTTS
+import os
 
 with open('token.txt') as inpf:
     token = inpf.readline()
@@ -42,6 +44,24 @@ async def playSmth(ctx):
     audio_source = discord.FFmpegPCMAudio('content/audio/Ohayo.mp3')
     if (ctx.voice_client):
         ctx.voice_client.play(audio_source)
+
+
+@bot.command()
+async def say(ctx, *args):
+    voiceline = ''
+    for arg in args:
+        voiceline += str(arg)
+        voiceline += " "
+    
+    # await ctx.send('Saying')
+    tmp_path = 'content/audio/tmp/voiceline.mp3'
+    narrator = gTTS(text=voiceline, lang='ru', slow=False)
+    narrator.save(tmp_path)
+
+    audio_source = discord.FFmpegPCMAudio(tmp_path)
+    if (ctx.voice_client):
+        ctx.voice_client.play(audio_source)
+
 
 @bot.event
 async def on_voice_state_update(member, before, after):
