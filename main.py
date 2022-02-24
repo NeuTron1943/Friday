@@ -4,9 +4,11 @@ import asyncio
 from gtts import gTTS
 import os
 
+
 # read secret token from file :) conspiracy
 with open('token.txt') as inpf:
     token = inpf.readline()
+
 
 
 # client = discord.Client()
@@ -50,17 +52,44 @@ async def leaveVoice(ctx): # Note: ?leave won't work, only ?~ will work unless y
 
 
 # playing sound
-'''
+
 @bot.command()# TODO
 async def playSmth(ctx):
     await ctx.send('Attempting to play')
     audio_source = discord.FFmpegPCMAudio('content/audio/Ohayo.mp3')
-    if (bot.voice_clients):
-        bot.voice_clients[0].play(audio_source)
+    # audio_source = discord.PCMVolumeTransformer(audio_source, volume=bot_volume)
+    if (ctx.voice_client):
+        ctx.voice_client.play(audio_source)
     else:
         await ctx.send('Friday is not connected to voice channel')
-'''
 
+# Блок управления воспроизведением
+# -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  - #
+@bot.command()
+async def pause(ctx):
+    ctx.voice_client.pause()
+
+@bot.command()
+async def resume(ctx):
+    ctx.voice_client.resume()
+
+@bot.command()
+async def stop(ctx):
+    ctx.voice_client.stop()
+
+# Doesn't work
+'''@bot.command()
+async def volume(ctx, arg: float):
+    if (ctx.voice_client):
+        await pause(ctx)
+    if 0 <= arg <= 100:
+        bot_volume = arg / 100
+        await ctx.send('Volume set to {:2.0f} %'.format(100*bot_volume))
+    else:
+        ctx.send("Volume must be from 0 to 100")
+    if (ctx.voice_client):
+        await resume(ctx)'''
+# -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  - #
 
 # pronouncing sentence of any length
 @bot.command()
@@ -75,12 +104,14 @@ async def say(ctx, *args):
     narrator.save(tmp_path)
 
     audio_source = discord.FFmpegPCMAudio(tmp_path)
-    # if (ctx.voice_client):
-        # ctx.voice_client.play(audio_source)
-    if (bot.voice_clients):
-        bot.voice_clients[0].play(audio_source)
+    if (ctx.voice_client):
+        ctx.voice_client.play(audio_source)
     else:
         await ctx.send('Friday is not connected to voice channel')
+    # if (bot.voice_clients):
+    #     bot.voice_clients[0].play(audio_source)
+    # else:
+    #     await ctx.send('Friday is not connected to voice channel')
         
 
 
