@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import asyncio
 from gtts import gTTS
+import logging
 import os
 
 
@@ -9,37 +10,67 @@ import os
 with open('token.txt') as inpf:
     token = inpf.readline()
 
+#create logging system
+log_handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
+
+intents = discord.Intents.default()
+intents.message_content = True
+intents.members = True
+intents.voice_states = True
 
 
-# client = discord.Client()
-bot = commands.Bot(command_prefix='!')
+# class MyBot(discord.Client):
+class MyBot(commands.Bot):
+    def __init__(self, **kwargs):
+        super(MyBot, self).__init__(**kwargs)
+
+    async def on_ready(self):
+        print(f'Logged on as {self.user}!')
+
+    async def on_message(self, message):
+        print(f'Message log:   {message.author} :   {message.content}')
+        if message.author == self.user:
+            return
+
+        await self.process_commands(message)
 
 
-# event occurs when bot logges into server
-@bot.event
-async def on_ready():
-    print('Logged in as {0.user}'.format(bot))
+bot = MyBot(command_prefix='!', intents=intents)
 
-
-# test command, writes arg in same chat
+# Test command for texting arguments
 @bot.command()
 async def q(ctx, arg):
     await ctx.send(arg)
 
-
+# Turn off the bot
+@bot.command()
+async def shutdown(ctx):
+    if str(ctx.author.top_role) == "Кирилл":
+        await ctx.send('Shutting down...Done.')
+        await bot.close()
+    else:
+        await ctx.send('Только Кирилл может меня выключить, позови его.')
+    
 # join same voice channel, as the author of the command
 @bot.command()
 async def joinVoice(ctx):
+    print("Here 1")
     if (ctx.author.voice): # Check if author of the command is in voice channel
+        print("Here 2")
         if not (ctx.voice_client): # Check if Friday is not already in voice channel
+            print("Here 3")
             voiceChannel = ctx.author.voice.channel
+            print("Here 34")
             await voiceChannel.connect()
+            print("Here 4")
             await ctx.send('Joined voice channel: "' + str(voiceChannel.name) + '"')
         else:
+            print("Here 5")
             await ctx.send('Friday already is in voice channel, use !leaveVoice')
     else:
+        print("Here 6")
         await ctx.send("Join voice channel to invite Friday")
-
+    print("Here 7")
 
 # leave current voice channel
 @bot.command()
@@ -51,89 +82,5 @@ async def leaveVoice(ctx): # Note: ?leave won't work, only ?~ will work unless y
         await ctx.send("I'm not in voice channel")
 
 
-# playing sound
 
-@bot.command()# TODO
-async def playSmth(ctx):
-    await ctx.send('Attempting to play')
-    audio_source = discord.FFmpegPCMAudio('content/audio/Ohayo.mp3')
-    # audio_source = discord.PCMVolumeTransformer(audio_source, volume=bot_volume)
-    if (ctx.voice_client):
-        ctx.voice_client.play(audio_source)
-    else:
-        await ctx.send('Friday is not connected to voice channel')
-
-# Блок управления воспроизведением
-# -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  - #
-@bot.command()
-async def pause(ctx):
-    ctx.voice_client.pause()
-
-@bot.command()
-async def resume(ctx):
-    ctx.voice_client.resume()
-
-@bot.command()
-async def stop(ctx):
-    ctx.voice_client.stop()
-
-# Doesn't work
-'''@bot.command()
-async def volume(ctx, arg: float):
-    if (ctx.voice_client):
-        await pause(ctx)
-    if 0 <= arg <= 100:
-        bot_volume = arg / 100
-        await ctx.send('Volume set to {:2.0f} %'.format(100*bot_volume))
-    else:
-        ctx.send("Volume must be from 0 to 100")
-    if (ctx.voice_client):
-        await resume(ctx)'''
-# -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  - #
-
-# pronouncing sentence of any length
-@bot.command()
-async def say(ctx, *args):
-    voiceline = ''
-    for arg in args:
-        voiceline += str(arg)
-        voiceline += " "
-    # await ctx.send('Saying')
-    tmp_path = 'content/audio/tmp/voiceline.mp3'
-    narrator = gTTS(text=voiceline, lang='ru', slow=False)
-    narrator.save(tmp_path)
-
-    audio_source = discord.FFmpegPCMAudio(tmp_path)
-    if (ctx.voice_client):
-        ctx.voice_client.play(audio_source)
-    else:
-        await ctx.send('Friday is not connected to voice channel')
-    # if (bot.voice_clients):
-    #     bot.voice_clients[0].play(audio_source)
-    # else:
-    #     await ctx.send('Friday is not connected to voice channel')
-        
-
-
-# play Ohayo when someone entered same voice channel
-@bot.event
-async def on_voice_state_update(member, before, after):
-    voiceClient = discord.utils.get(bot.voice_clients, guild=member.guild)
-    if ((before.channel is None) and (voiceClient is not None) and (after.channel == voiceClient.channel)):
-        audio_source = discord.FFmpegPCMAudio('content/audio/Ohayo.mp3')
-        await asyncio.sleep(1)
-        voiceClient.play(audio_source)
-                 
-
-# shutdown bot
-@bot.command()
-async def shutdown(ctx):
-    if str(ctx.author.top_role) == "Кирилл":
-        await ctx.send('Shutting down...Done.')
-        await bot.close()
-    else:
-        await ctx.send('Только Кирилл может меня выключить, позови его.')
-
-
-# running bot
-bot.run(token)
+bot.run(token, log_handler=log_handler, log_level=logging.DEBUG)
