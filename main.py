@@ -1,46 +1,36 @@
 import discord
 from discord.ext import commands
-import asyncio
 from gtts import gTTS
-import logging
 import os
-
+import yt_dlp as youtube_dl
 
 # read secret token from file :) conspiracy
 with open('token.txt') as inpf:
     token = inpf.readline()
 
-#create logging system
-log_handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
-
+AUDIO_PATH = 'C:/Projects/Friday/content/audio/'
+ydl_opts = {
+    'format': 'bestaudio/best',
+    'postprocessors': [{
+        'key': 'FFmpegExtractAudio',
+        'preferredcodec': 'mp3',
+        'preferredquality': '192',
+    }],
+    'outtmpl': 'downloads/%(title)s.%(ext)s',
+}
+# Включаем необходимые разрешения
 intents = discord.Intents.default()
 intents.message_content = True
-intents.members = True
-intents.voice_states = True
+
+# Создаем экземпляр бота с префиксом команд
+bot = commands.Bot(command_prefix='!', intents=intents)
 
 
-# class MyBot(discord.Client):
-class MyBot(commands.Bot):
-    def __init__(self, **kwargs):
-        super(MyBot, self).__init__(**kwargs)
-
-    async def on_ready(self):
-        print(f'Logged on as {self.user}!')
-
-    async def on_message(self, message):
-        print(f'Message log:   {message.author} :   {message.content}')
-        if message.author == self.user:
-            return
-
-        await self.process_commands(message)
-
-
-bot = MyBot(command_prefix='!', intents=intents)
-
-# Test command for texting arguments
 @bot.command()
-async def q(ctx, arg):
-    await ctx.send(arg)
+async def q(ctx, *, text: str):
+    """Дублирует указанный текст"""
+    await ctx.send(text)
+
 
 # Turn off the bot
 @bot.command()
@@ -50,37 +40,119 @@ async def shutdown(ctx):
         await bot.close()
     else:
         await ctx.send('Только Кирилл может меня выключить, позови его.')
-    
-# join same voice channel, as the author of the command
+
 @bot.command()
 async def joinVoice(ctx):
-    print("Here 1")
-    if (ctx.author.voice): # Check if author of the command is in voice channel
-        print("Here 2")
-        if not (ctx.voice_client): # Check if Friday is not already in voice channel
-            print("Here 3")
-            voiceChannel = ctx.author.voice.channel
-            print("Here 34")
-            await voiceChannel.connect()
-            print("Here 4")
-            await ctx.send('Joined voice channel: "' + str(voiceChannel.name) + '"')
+    """Подключает бота к голосовому каналу"""
+    # Проверяем, находится ли пользователь в голосовом канале
+    if not ctx.author.voice:
+        await ctx.send("Сначала зайдите в голосовой канал!")
+        return
+
+    # Получаем канал пользователя
+    channel = ctx.author.voice.channel
+
+    # Проверяем, подключен ли бот уже к голосовому каналу
+    if ctx.voice_client:
+        # Если бот уже в канале пользователя
+        if ctx.voice_client.channel == channel:
+            await ctx.send("Я уже в вашем голосовом канале!")
         else:
-            print("Here 5")
-            await ctx.send('Friday already is in voice channel, use !leaveVoice')
+            # Если бот в другом канале, перемещаемся
+            await ctx.voice_client.move_to(channel)
+            await ctx.send(f"Переместился в канал {channel.name}!")
     else:
-        print("Here 6")
-        await ctx.send("Join voice channel to invite Friday")
-    print("Here 7")
+        # Если бот не подключен, подключаемся
+        await channel.connect()
+        await ctx.send(f"Подключился к каналу {channel.name}!")
 
-# leave current voice channel
 @bot.command()
-async def leaveVoice(ctx): # Note: ?leave won't work, only ?~ will work unless you change  `name = ["~"]` to `aliases = ["~"]` so both can work.
-    if (ctx.voice_client): # If the bot is in a voice channel 
-        await ctx.guild.voice_client.disconnect() # Leave the channel
-        await ctx.send('Left voice channel')
-    else: # But if it isn't
-        await ctx.send("I'm not in voice channel")
+async def playAudio(ctx, *, path: str):
+    """Воспроизводит аудиофайл из указанного пути"""
+    global current_player
+    
+    path = os.path.join(AUDIO_PATH, path)
+    print(f'Attemting to play {path}')
+    # Проверка существования файла
+    if not os.path.exists(path):
+        await ctx.send("Файл не найден!")
+        return
+
+    # Проверка подключения к голосовому каналу
+    if not ctx.voice_client:
+        await ctx.invoke(bot.get_command('joinVoice'))
+
+    # Останавливаем текущее воспроизведение
+    if ctx.voice_client.is_playing():
+        ctx.voice_client.stop()
+
+    # Создаем аудио источник
+    source = discord.FFmpegPCMAudio(executable="ffmpeg", source=path)
+    current_player = ctx.voice_client.play(source)
+    await ctx.send(f"Начинаю воспроизведение: {path}")
+
+@bot.command()
+async def stop(ctx):
+    """Останавливает текущее воспроизведение"""
+    if ctx.voice_client and ctx.voice_client.is_playing():
+        ctx.voice_client.stop()
+        await ctx.send("Воспроизведение остановлено!")
+    else:
+        await ctx.send("Сейчас ничего не играет!")    
+
+class YTDLSource(discord.PCMVolumeTransformer):
+    def __init__(self, source, *, data, volume=0.5):
+        super().__init__(source, volume)
+        self.data = data
+        self.title = data.get('title')
+
+    @classmethod
+    async def from_url(cls, url, *, loop=None, stream=False):
+        ytdl = youtube_dl.YoutubeDL(ydl_opts)
+        data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=not stream))
+        
+        if 'entries' in data:
+            data = data['entries'][0]
+        
+        filename = data['url'] if stream else ytdl.prepare_filename(data)
+        return cls(discord.FFmpegPCMAudio(filename), data=data)
+
+@bot.command()
+async def youtube(ctx, url: str):
+    """Воспроизводит аудио с YouTube"""
+    if not ctx.author.voice:
+        await ctx.send("Сначала зайдите в голосовой канал!")
+        return
+
+    # Подключаемся к каналу если не подключены
+    if not ctx.voice_client:
+        await ctx.author.voice.channel.connect()
+
+    # Создаем аудио источник
+    player = await YTDLSource.from_url(url, loop=bot.loop, stream=True)
+    
+    # Останавливаем текущее воспроизведение
+    if ctx.voice_client.is_playing():
+        ctx.voice_client.stop()
+
+    ctx.voice_client.play(player, after=lambda e: print(f'Ошибка: {e}') if e else None)
+    await ctx.send(f"Сейчас играет: {player.title}")
+
+@q.error
+async def quote_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send("Добавьте текст после команды! Пример: `!q Привет!`")
+
+@joinVoice.error
+async def join_error(ctx, error):
+    if isinstance(error, commands.CommandError):
+        await ctx.send("Ошибка подключения! Проверьте права бота")
+
+# Обработчики ошибок
+@playAudio.error
+async def play_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send("Укажите путь к файлу! Пример: `!play music.mp3`")
 
 
-
-bot.run(token, log_handler=log_handler, log_level=logging.DEBUG)
+bot.run(token)
